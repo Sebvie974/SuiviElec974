@@ -306,7 +306,7 @@
 
                         <div>
                             <label class="block text-xs font-medium text-slate-300 light:text-slate-700 mb-1">Index Compteur (kWh)</label>
-                            <input type="number" step="0.1" id="inputIndexBase" placeholder="ex: 7115" oninput="calculateLiveDelta()" required class="w-full bg-slate-900 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-100 light:text-slate-900 font-mono font-bold text-amber-400">
+                            <input type="number" step="0.1" id="inputIndexBase" placeholder="ex: 7115" oninput="calculateLiveDelta(this.form)" required class="w-full bg-slate-900 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-100 light:text-slate-900 font-mono font-bold text-amber-400">
                         </div>
 
                         <!-- Zone de Prévisualisation Immédiate -->
@@ -927,13 +927,18 @@ self.addEventListener('fetch', (e) => {
         }
 
         // --- SAISIE DU RELEVÉ & DÉTECTION D'ANOMALIE ---
-        function calculateLiveDelta() {
-            const inputVal = parseFloat(document.getElementById('inputIndexBase').value);
-            const warningBox = document.getElementById('readingWarningBox');
+        function calculateLiveDelta(form) {
+            // La modale contient une copie du formulaire (IDs en double) :
+            // on cherche donc toujours les champs DANS le formulaire concerné.
+            const scope = form || document.getElementById('readingForm');
+            const $ = (id) => scope.querySelector('#' + id);
+
+            const inputVal = parseFloat($('inputIndexBase').value);
+            const warningBox = $('readingWarningBox');
 
             if (isNaN(inputVal)) {
-                document.getElementById('liveDeltaKwh').innerText = '+0.0 kWh';
-                document.getElementById('liveDeltaCost').innerText = '0,00 € TTC';
+                $('liveDeltaKwh').innerText = '+0.0 kWh';
+                $('liveDeltaCost').innerText = '0,00 € TTC';
                 warningBox.classList.add('hidden');
                 return;
             }
@@ -947,8 +952,8 @@ self.addEventListener('fetch', (e) => {
             const activePrice = appData.config.effectiveKwhCost || appData.config.kwhBase;
             const cost = delta * activePrice;
 
-            document.getElementById('liveDeltaKwh').innerText = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} kWh`;
-            document.getElementById('liveDeltaCost').innerText = `${Math.max(0, cost).toFixed(2)} € TTC`;
+            $('liveDeltaKwh').innerText = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} kWh`;
+            $('liveDeltaCost').innerText = `${Math.max(0, cost).toFixed(2)} € TTC`;
 
             // Calcul moyenne quotidienne globale pour détection de hausse
             let avgDailyKwh = 8.0;
@@ -971,9 +976,11 @@ self.addEventListener('fetch', (e) => {
 
         function handleSaveReading(e) {
             e.preventDefault();
-            const dateTime = document.getElementById('readingDateTime').value;
-            const indexBase = parseFloat(document.getElementById('inputIndexBase').value);
-            const note = document.getElementById('inputReadingNote').value.trim();
+            const form = e.currentTarget || e.target;          // formulaire réellement soumis (onglet ou modale)
+            const $ = (id) => form.querySelector('#' + id);
+            const dateTime = $('readingDateTime').value;
+            const indexBase = parseFloat($('inputIndexBase').value);
+            const note = $('inputReadingNote').value.trim();
 
             if (isNaN(indexBase) || indexBase <= 0) {
                 showToast("⚠️ Veuillez entrer un index compteur valide.", "warning");
@@ -991,9 +998,11 @@ self.addEventListener('fetch', (e) => {
             appData.readings.push(newReading);
             saveData();
 
-            document.getElementById('inputIndexBase').value = '';
-            document.getElementById('inputReadingNote').value = '';
-            document.getElementById('readingWarningBox').classList.add('hidden');
+            // Vide les champs de l'onglet ET de la modale
+            document.querySelectorAll('#inputIndexBase, #inputReadingNote').forEach(el => el.value = '');
+            document.querySelectorAll('#readingWarningBox').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('#liveDeltaKwh').forEach(el => el.innerText = '+0.0 kWh');
+            document.querySelectorAll('#liveDeltaCost').forEach(el => el.innerText = '0,00 € TTC');
             closeModal('readingModal');
             showToast("⚡ Relevé compteur enregistré avec succès !");
         }
@@ -1377,7 +1386,8 @@ self.addEventListener('fetch', (e) => {
         // --- GESTION DES MODALES ET ACTIONS ---
         function openModal(id) {
             if (id === 'readingModal') {
-                const formHTML = document.getElementById('readingForm').outerHTML;
+                const formHTML = document.getElementById('readingForm').outerHTML
+                    .replace('id="readingForm"', 'id="readingFormModal"');
                 document.getElementById('modalFormContainer').innerHTML = formHTML;
                 const now = new Date();
                 const isoStr = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
